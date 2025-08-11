@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.1.2",
+    "ipc-client": "github:pygmyapp/ipc-client#c2a7e0c",
     "snowyflake": "^2.0.1"
   }
 }

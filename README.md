@@ -5,7 +5,7 @@ WebSocket server for real-time communication and events
 **Pygmy is built with Bun!** It doesn't run on node.js alone, [see here to install Bun](https://bun.com/docs/installation) or [here to learn more](https://bun.sh).
 
 `pygmyapp/gateway` depends on:
-- an active IPC server (`pygmyapp/ipc`), used for authentication
+- an active IPC server (`pygmyapp/ipc-server`), used for authentication
 - an active REST API (`pygmyapp/rest`), used for reacting to REST events when they occur
 
 ## Install

@@ -3,8 +3,8 @@ import {
   decode as msgpackDecode,
   encode as msgpackEncode
 } from '@msgpack/msgpack';
-// TODO: move ipc to it's own separate library/repo
-import IPC, { type IPCMessage } from '../../../ipc/src/lib';
+// @ts-ignore ipc-client is lacking typing... fix this
+import IPC, { type IPCMessage } from 'ipc-client';
 import {
   type Client,
   CloseCodes,
