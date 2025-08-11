@@ -5,7 +5,7 @@
       "name": "gateway",
       "dependencies": {
         "@msgpack/msgpack": "^3.1.2",
-        "ipc-client": "github:pygmyapp/ipc-client#c2a7e0c",
+        "ipc-client": "github:pygmyapp/ipc-client#d3bdd7f",
         "snowyflake": "^2.0.1",
       },
       "devDependencies": {
@@ -57,7 +57,7 @@
 
     "easy-stack": ["easy-stack@1.0.1", "", {}, "sha512-wK2sCs4feiiJeFXn3zvY0p41mdU5VUgbgs1rNsc/y5ngFUijdWd+iIN8eoyuZHKB8xN6BL4PdWmzqFmxNg6V2w=="],
 
-    "ipc-client": ["ipc-client@github:pygmyapp/ipc-client#c2a7e0c", { "dependencies": { "node-ipc": "npm:@achrinza/node-ipc@^10.1.11" } }, "pygmyapp-ipc-client-c2a7e0c"],
+    "ipc-client": ["ipc-client@github:pygmyapp/ipc-client#d3bdd7f", { "dependencies": { "node-ipc": "npm:@achrinza/node-ipc@^10.1.11" } }, "pygmyapp-ipc-client-d3bdd7f"],
 
     "js-message": ["js-message@1.0.7", "", {}, "sha512-efJLHhLjIyKRewNS9EGZ4UpI8NguuL6fKkhRxVuMmrGV2xN/0APGdQYwLFky5w9naebSZ0OwAGp0G6/2Cg90rA=="],
 
