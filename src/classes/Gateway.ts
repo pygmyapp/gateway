@@ -1,10 +1,10 @@
-import EventEmitter from 'node:events';
 import {
   decode as msgpackDecode,
   encode as msgpackEncode
 } from '@msgpack/msgpack';
 // @ts-ignore ipc-client is lacking typing... fix this
 import IPC, { type IPCMessage } from 'ipc-client';
+import { EventEmitter } from 'tseep';
 import {
   type Client,
   CloseCodes,
@@ -15,11 +15,15 @@ import {
 } from '../constants';
 import { generateSnowflake } from '../snowflake';
 
-export class Gateway extends EventEmitter {
+export class Gateway extends EventEmitter<{
+  ready: () => void;
+  'ipc.connect': () => void;
+  'ipc.disconnect': () => void;
+}> {
   server: Bun.Server;
   ipc: IPC;
   clients: Client[];
-  eventBufferSweepInterval: NodeJS.Timer | undefined;
+  eventBufferSweepInterval: NodeJS.Timeout | undefined;
 
   constructor() {
     super();
@@ -208,11 +212,12 @@ export class Gateway extends EventEmitter {
 
         const { valid, userId } = await this.verifyToken(
           message.dt.token.startsWith('Bearer ')
-          ? message.dt.token.split(' ')[1]
-          : message.dt.token
+            ? message.dt.token.split(' ')[1]
+            : message.dt.token
         );
 
-        if (!valid || userId === null) return ws.close(CloseCodes.INVALID_AUTHENTICATION);
+        if (!valid || userId === null)
+          return ws.close(CloseCodes.INVALID_AUTHENTICATION);
 
         // Set client data
         client.identity.id = userId;
@@ -459,21 +464,24 @@ export class Gateway extends EventEmitter {
    * @param token Token to verify
    * @returns Boolean indicating if token is valid
    */
-  verifyToken(token: string): Promise<{ valid: boolean, userId: string | null }> {
+  verifyToken(
+    token: string
+  ): Promise<{ valid: boolean; userId: string | null }> {
     return new Promise((resolve, _reject) => {
       this.ipc.on('message', (message: IPCMessage) => {
         if (
-          message.from === 'rest'
-          && 'type' in message.payload
-          && (message.payload.type as string) === 'response'
-          && 'token' in message.payload
-          && (message.payload.token as string) === token
-          && 'valid' in message.payload
-          && 'userId' in message.payload
-        ) return resolve({
-          valid: message.payload.valid as boolean,
-          userId: message.payload.userId as string | null
-        });
+          message.from === 'rest' &&
+          'type' in message.payload &&
+          (message.payload.type as string) === 'response' &&
+          'token' in message.payload &&
+          (message.payload.token as string) === token &&
+          'valid' in message.payload &&
+          'userId' in message.payload
+        )
+          return resolve({
+            valid: message.payload.valid as boolean,
+            userId: message.payload.userId as string | null
+          });
       });
 
       this.ipc.send('rest', {
