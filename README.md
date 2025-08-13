@@ -10,31 +10,35 @@ WebSocket server for real-time communication and events
 
 ## Install
 
+### Docker
+
+If you are using Docker, you can clone this repository and run:
+
+```sh
+docker compose build # build image
+
+docker compose up # start image
+```
+
 ### Manual
 
 - Clone this repository
 - Install dependencies with `bun install`
 - Copy `.env.example` to `.env` and configure environment variables
 
-## Running
-
-To start in production mode:
-
+You can then start in production/dev mode:
 ```sh
-bun run prod
-```
+bun run prod # production
 
-To run in dev mode (reload on file changes):
-
-```sh
-bun run dev
+bun run dev # dev mode - reloads on file changes
 ```
 
 ## Scripts
 
-- `bun run lint`: runs Biome's linting, applies safe fixes, suggests fixes to errors, and auto-organizes imports
+- `bun run lint`: runs Biome linting, applies safe fixes, and auto-organizes imports
 
 ## Licence
-Copyright (c) 2025 Pygmy & contributors  
+Copyright (c) 2025 Pygmy & contributors
+
 All code & assets are licensed under GNU GPL v3 unless stated otherwise.  
 See `LICENSE` or [see here](https://www.gnu.org/licenses/gpl-3.0.txt).
