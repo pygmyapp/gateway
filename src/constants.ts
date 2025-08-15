@@ -41,6 +41,7 @@ export type AuthenticationType = 'unauthenticated' | 'authenticated';
 // Interfaces
 export interface Client {
   id: string;
+  socket: Bun.ServerWebSocket<WebSocketData>;
   encoding: EncodingType;
   status: AuthenticationType;
   seq: number;

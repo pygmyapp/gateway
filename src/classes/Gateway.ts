@@ -88,6 +88,7 @@ export class Gateway extends EventEmitter<{
 
     const client: Client = {
       id,
+      socket: ws,
       encoding,
       status: 'unauthenticated',
       seq: 0,
@@ -221,6 +222,7 @@ export class Gateway extends EventEmitter<{
 
         // Set client data
         client.identity.id = userId;
+        client.status = 'authenticated';
 
         // Send READY
         ws.send(
@@ -332,8 +334,33 @@ export class Gateway extends EventEmitter<{
    * Handles a message from the IPC server/socket
    * @param message IPC message data
    */
-  handleIPCMessage(_message: IPCMessage) {
-    return;
+  handleIPCMessage(message: IPCMessage) {
+    const type = message.payload.type as string;
+
+    if (type === 'event') {
+      const {
+        type: _type,
+        event,
+        to,
+        ...payload
+      }: {
+        type: string;
+        event: string;
+        to: string;
+        payload: any;
+      } = message.payload;
+
+      // Find who to send the event to
+      const client = this.clients.find((i) =>
+        i.status === 'authenticated'
+        && i.identity.id === to
+      );
+
+      if (!client) return;
+
+      // Send event
+      this.sendEventToClient(client.socket, event, payload);
+    }
   }
 
   /**
