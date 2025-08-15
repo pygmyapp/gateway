@@ -341,19 +341,19 @@ export class Gateway extends EventEmitter<{
       const {
         type: _type,
         event,
-        to,
+        client: clientId,
         ...payload
       }: {
         type: string;
         event: string;
-        to: string;
+        client: string;
         payload: any;
       } = message.payload;
 
       // Find who to send the event to
       const client = this.clients.find((i) =>
         i.status === 'authenticated'
-        && i.identity.id === to
+        && i.identity.id === clientId
       );
 
       if (!client) return;
