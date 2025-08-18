@@ -48,6 +48,7 @@ export interface Client {
   eventBuffer: BufferedEvent[];
   heartbeat: ClientHeartbeat;
   identity: ClientIdentity;
+  relations: string[];
 }
 
 export interface ClientHeartbeat {
@@ -58,20 +59,27 @@ export interface ClientHeartbeat {
 
 export interface ClientIdentity {
   id: string | undefined;
+  presence: Presence | null;
   timeout: NodeJS.Timeout | undefined;
   resumeTimeout: NodeJS.Timeout | undefined;
 }
 
 export interface DecodedMessage {
   op: number;
-  ev?: number;
+  ev?: string;
   seq?: number;
   dt?: DecodedMessageData;
 }
 
 export interface DecodedMessageData {
+  // OP 0 EVENT
+  // - PRESENCE_UPDATE
+  status: 'online' | 'away' | 'dnd' | 'offline';
+  text: string | null;
+
   // OP 2 IDENTIFY
   token?: string;
+  presence?: Presence;
 
   // OP 6 RESUME
   id?: string;
@@ -90,4 +98,18 @@ export interface BufferedEvent {
   timestamp: number;
   event: string;
   payload: unknown;
+}
+
+export interface RawUser {
+  id: string;
+  username: string;
+}
+
+export interface User extends RawUser {
+  presence: Presence;
+}
+
+export interface Presence {
+  status: 'online' | 'away' | 'dnd' | 'offline';
+  text: string | null;
 }

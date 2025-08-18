@@ -11,6 +11,9 @@ import {
   type DecodedMessage,
   type EncodingType,
   OPCodes,
+  type Presence,
+  type RawUser,
+  type User,
   type WebSocketData
 } from '../constants';
 import { generateSnowflake } from '../snowflake';
@@ -100,9 +103,11 @@ export class Gateway extends EventEmitter<{
       },
       identity: {
         id: undefined,
+        presence: null,
         timeout: undefined,
         resumeTimeout: undefined
-      }
+      },
+      relations: []
     };
 
     ws.data.id = id;
@@ -136,7 +141,7 @@ export class Gateway extends EventEmitter<{
    * @param code WebSocket close code
    * @param message WebSocket close message
    */
-  handleConnectionClose(
+  async handleConnectionClose(
     ws: Bun.ServerWebSocket<WebSocketData>,
     code: number,
     _message: string
@@ -153,9 +158,33 @@ export class Gateway extends EventEmitter<{
 
     // Intentional close
     if (code === CloseCodes.NORMAL_CLOSURE || code === CloseCodes.GOING_AWAY) {
-      // [tell clients of disconnect/presence_update]
-      // see below;
-      // ...
+      // Broadcast presence update to related clients
+      if (
+        client.status === 'authenticated' &&
+        typeof client.identity.id === 'string'
+      ) {
+        const clients = this.clients.filter((i) => {
+          return (
+            i.status === 'authenticated' &&
+            i.relations.includes(client.identity.id ?? '') &&
+            i.identity.id !== client.identity.id
+          );
+        });
+
+        if (clients.length > 0)
+          await Promise.all(
+            clients.map(async (i) => {
+              this.sendEventToClient(i.socket, 'PRESENCE_UPDATE', {
+                userId: client.identity.id,
+                oldPresence: client.identity.presence,
+                newPresence: {
+                  status: 'offline',
+                  text: null
+                }
+              });
+            })
+          );
+      }
 
       // Remove client from client list
       this.deleteClient(client.id);
@@ -164,11 +193,30 @@ export class Gateway extends EventEmitter<{
     // Unintentional close
     else {
       // Set resume timeout
-      client.identity.resumeTimeout = setTimeout(() => {
-        // [tell clients of disconnect/presence_update]
-        // this needs to filter so only clients that NEED to know are sent the event
-        // one of: friends with client, sharing server with client, open dm/group dm channel with client in it
-        // ...
+      client.identity.resumeTimeout = setTimeout(async () => {
+        // Broadcast presence update to related clients
+        if (
+          client.status === 'authenticated' &&
+          typeof client.identity.id === 'string'
+        ) {
+          const clients = this.clients.filter(
+            (i) =>
+              i.status === 'authenticated' &&
+              i.relations.includes(client.identity.id ?? '') &&
+              i.identity.id !== client.identity.id
+          );
+
+          if (clients.length > 0)
+            await Promise.all(
+              clients.map(async (i) => {
+                this.sendEventToClient(i.socket, 'PRESENCE_UPDATE', {
+                  userId: client.identity.id,
+                  oldPresence: client.identity.presence,
+                  newPresence: null
+                });
+              })
+            );
+        }
 
         // Remove client from client list
         this.deleteClient(client.id);
@@ -193,7 +241,60 @@ export class Gateway extends EventEmitter<{
       const message = this.decodeMessage(client.encoding, encoded);
 
       if (!message) return ws.close(CloseCodes.UNKNOWN);
-      if (!message.op) return ws.close(CloseCodes.INVALID_PAYLOAD);
+      if (message.op === undefined) return ws.close(CloseCodes.INVALID_PAYLOAD);
+
+      // EVENT
+      if (message.op === OPCodes.EVENT) {
+        if (client.status !== 'authenticated')
+          return ws.close(CloseCodes.NOT_AUTHENTICATED);
+
+        if (!message.ev) return ws.close(CloseCodes.INVALID_PAYLOAD);
+
+        // PRESENCE_UPDATE
+        if (message.ev === 'PRESENCE_UPDATE') {
+          if (!message.dt) return ws.close(CloseCodes.INVALID_PAYLOAD);
+
+          if (message.dt.status && typeof message.dt.status !== 'string')
+            return ws.close(CloseCodes.INVALID_PAYLOAD); // TODO: change this to OP 8 ERROR
+          if (message.dt.text && typeof message.dt.text !== 'string')
+            return ws.close(CloseCodes.INVALID_PAYLOAD); // TODO: change this to OP 8 ERROR
+
+          const oldPresence: Presence | null = client.identity.presence;
+
+          const newPresence: Presence = client.identity.presence ?? {
+            status: 'online',
+            text: null
+          };
+
+          if (message.dt.status) newPresence.status = message.dt.status;
+          if (message.dt.text) newPresence.text = message.dt.text;
+
+          // Broadcast to related clients
+          const clients = this.clients.filter(
+            (i) =>
+              i.status === 'authenticated' &&
+              i.relations.includes(client.identity.id ?? '')
+          );
+
+          if (clients.length > 0)
+            await Promise.all(
+              clients.map(async (i) => {
+                this.sendEventToClient(i.socket, 'PRESENCE_UPDATE', {
+                  userId: client.identity.id,
+                  oldPresence,
+                  newPresence
+                });
+              })
+            );
+
+          // Send to this client as well
+          this.sendEventToClient(ws, 'PRESENCE_UPDATE', {
+            userId: client.identity.id,
+            oldPresence,
+            newPresence
+          });
+        }
+      }
 
       // IDENTIFY
       if (message.op === OPCodes.IDENTIFY) {
@@ -220,19 +321,52 @@ export class Gateway extends EventEmitter<{
         if (!valid || userId === null)
           return ws.close(CloseCodes.INVALID_AUTHENTICATION);
 
+        // Fetch initial data to send
+        const users = await this.fetchUserData(userId);
+
         // Set client data
-        client.identity.id = userId;
         client.status = 'authenticated';
+        client.relations = users.map(({ id }) => id);
+        client.identity.id = userId;
+        client.identity.presence = {
+          status: message.dt?.presence ? message.dt.presence.status : 'online',
+          text: message.dt?.presence ? message.dt.presence.text : null
+        };
 
         // Send READY
         ws.send(
           this.encodeMessage(client.encoding, {
             op: OPCodes.READY,
             dt: {
-              id: client.id
+              id: client.id,
+              users
             }
           })
         );
+
+        // Send presence update to clients
+        const clients = this.clients.filter(
+          (client) =>
+            client.status === 'authenticated' &&
+            client.relations.includes(userId) &&
+            client.identity.id !== userId
+        );
+
+        if (clients.length > 0)
+          await Promise.all(
+            clients.map(async (client) => {
+              this.sendEventToClient(client.socket, 'PRESENCE_UPDATE', {
+                userId,
+                oldPresence: null,
+                newPresence: {
+                  status: message.dt?.presence
+                    ? message.dt.presence.status
+                    : 'online',
+                  text: message.dt?.presence ? message.dt.presence.text : null
+                }
+              });
+            })
+          );
       }
 
       // HEARTBEAT
@@ -284,6 +418,7 @@ export class Gateway extends EventEmitter<{
         // Transfer old client data to new one
         client.identity = {
           id: previousClient.identity.id,
+          presence: previousClient.identity.presence,
           timeout: undefined,
           resumeTimeout: undefined
         };
@@ -334,7 +469,7 @@ export class Gateway extends EventEmitter<{
    * Handles a message from the IPC server/socket
    * @param message IPC message data
    */
-  handleIPCMessage(message: IPCMessage) {
+  async handleIPCMessage(message: IPCMessage) {
     const type = message.payload.type as string;
 
     if (type === 'event') {
@@ -347,19 +482,71 @@ export class Gateway extends EventEmitter<{
         type: string;
         event: string;
         client: string;
-        payload: any;
+        [key: string]: unknown;
       } = message.payload;
 
+      // Handle "broadcast" type events separately
+      // TODO: only add this in when adding user update events? don't know what crack i was on but presence update ain't one lmao
+      /*if (['PRESENCE_UPDATE'].includes(event)) {
+        // Find all the clients to send to, based off user relations
+        const clients = this.clients.filter((client) =>
+          client.status === 'authenticated'
+          && client.relations.includes(clientId)
+          && client.identity.id !== clientId
+        );
+
+        if (clients.length <= 0) return;
+
+        // Modify payload, if required
+        let modifiedPayload: any = payload;
+
+        if (event === 'PRESENCE_UPDATE') {
+          const client = this.clients.find((client) =>
+            client.status === 'authenticated'
+            && client.identity.id === clientId
+          );
+          
+          modifiedPayload = {
+            userId: payload.userId,
+            oldPresence: client?.identity.presence,
+            newPresence: payload.presence
+          }
+        }
+
+        // Send event to each client
+        await Promise.all(
+          clients.map(async (client) => {
+            this.sendEventToClient(client.socket, event, modifiedPayload);
+          })
+        );
+      }*/
+
       // Find who to send the event to
-      const client = this.clients.find((i) =>
-        i.status === 'authenticated'
-        && i.identity.id === clientId
+      const client = this.clients.find(
+        (client) =>
+          client.status === 'authenticated' && client.identity.id === clientId
       );
 
       if (!client) return;
 
       // Send event
       this.sendEventToClient(client.socket, event, payload);
+
+      // Hook into certain events to keep relations up to date for the Gateway
+      if (['FRIEND_CREATE'].includes(event)) {
+        if (!client.relations.includes(payload.userId as string))
+          client.relations.push(payload.userId as string);
+      }
+
+      if (['FRIEND_DELETE'].includes(event)) {
+        const index = client.relations.findIndex(
+          (id) => id === (payload.userId as string)
+        );
+
+        if (index === -1) return;
+
+        client.relations.splice(index, 1);
+      }
     }
   }
 
@@ -515,6 +702,64 @@ export class Gateway extends EventEmitter<{
         type: 'request',
         action: 'VERIFY_TOKEN',
         token
+      });
+    });
+  }
+
+  /**
+   * Fetch initial user data
+   * @param userId ID of user to fetch data for
+   * @returns Array of user objects
+   */
+  fetchUserData(userId: string): Promise<User[]> {
+    return new Promise((resolve, _reject) => {
+      this.ipc.on('message', (message: IPCMessage) => {
+        if (
+          message.from === 'rest' &&
+          'type' in message.payload &&
+          (message.payload.type as string) === 'response' &&
+          'userId' in message.payload &&
+          (message.payload.userId as string) === userId &&
+          'data' in message.payload
+        ) {
+          // Determine and add presence data by finding client
+          const data: User[] = (message.payload.data as RawUser[]).map(
+            (user) => {
+              const client = this.clients.find(
+                (client) =>
+                  client.status === 'authenticated' &&
+                  client.identity.id === user.id
+              );
+
+              const defaultPresence: Presence = {
+                status: 'offline',
+                text: null
+              };
+
+              if (!client)
+                return {
+                  presence: defaultPresence,
+                  ...user
+                };
+
+              return {
+                presence:
+                  client.identity.presence === null
+                    ? defaultPresence
+                    : client.identity.presence,
+                ...user
+              };
+            }
+          );
+
+          return resolve(data);
+        }
+      });
+
+      this.ipc.send('rest', {
+        type: 'request',
+        action: 'FETCH_USER_DATA',
+        userId
       });
     });
   }
