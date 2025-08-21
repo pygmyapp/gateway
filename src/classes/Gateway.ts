@@ -23,7 +23,7 @@ export class Gateway extends EventEmitter<{
   'ipc.connect': () => void;
   'ipc.disconnect': () => void;
 }> {
-  server: Bun.Server;
+  server: Bun.Server | undefined;
   ipc: IPC;
   clients: Client[];
   eventBufferSweepInterval: NodeJS.Timeout | undefined;
@@ -255,19 +255,35 @@ export class Gateway extends EventEmitter<{
           if (!message.dt) return ws.close(CloseCodes.INVALID_PAYLOAD);
 
           if (message.dt.status && typeof message.dt.status !== 'string')
-            return ws.close(CloseCodes.INVALID_PAYLOAD); // TODO: change this to OP 8 ERROR
-          if (message.dt.text && typeof message.dt.text !== 'string')
-            return ws.close(CloseCodes.INVALID_PAYLOAD); // TODO: change this to OP 8 ERROR
+            return ws.send(
+              this.encodeMessage(client.encoding, {
+                op: OPCodes.ERROR,
+                dt: {
+                  code: 10014, // TODO: error numbers/docs
+                  message: 'Invalid payload'
+                }
+              })
+            );
+
+          if (message.dt.text && (typeof message.dt.text !== 'string' && message.dt.text !== null))
+            return ws.send(
+              this.encodeMessage(client.encoding, {
+                op: OPCodes.ERROR,
+                dt: {
+                  code: 10015, // TODO: error numbers/docs
+                  message: 'Invalid payload'
+                }
+              })
+            );
+
+          console.log(message.dt)
 
           const oldPresence: Presence | null = client.identity.presence;
 
-          const newPresence: Presence = client.identity.presence ?? {
-            status: 'online',
-            text: null
+          const newPresence: Presence = {
+            status: message.dt.status,
+            text: message.dt.text
           };
-
-          if (message.dt.status) newPresence.status = message.dt.status;
-          if (message.dt.text) newPresence.text = message.dt.text;
 
           // Broadcast to related clients
           const clients = this.clients.filter(
@@ -313,9 +329,8 @@ export class Gateway extends EventEmitter<{
           message.dt.token = message.dt.token.split(' ')[1];
 
         const { valid, userId } = await this.verifyToken(
-          message.dt.token.startsWith('Bearer ')
-            ? message.dt.token.split(' ')[1]
-            : message.dt.token
+          // @ts-ignore this does exist, it is confirmed at the start of the func.
+          message.dt.token.startsWith('Bearer ') ? message.dt.token.split(' ')[1] : message.dt.token
         );
 
         if (!valid || userId === null)
