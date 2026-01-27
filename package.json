@@ -11,12 +11,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.1.3",
-    "@tsconfig/bun": "^1.0.8",
+    "@tsconfig/bun": "^1.0.10",
     "@types/bun": "latest",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@msgpack/msgpack": "^3.1.2",
+    "@msgpack/msgpack": "^3.1.3",
     "ipc-client": "github:pygmyapp/ipc-client",
     "snowyflake": "^2.0.1",
     "tseep": "^1.3.1"
