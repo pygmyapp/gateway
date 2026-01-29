@@ -23,7 +23,7 @@ export class Gateway extends EventEmitter<{
   'ipc.connect': () => void;
   'ipc.disconnect': () => void;
 }> {
-  server: Bun.Server | undefined;
+  server: Bun.Server<WebSocketData> | undefined;
   ipc: IPC;
   clients: Client[];
   eventBufferSweepInterval: NodeJS.Timeout | undefined;
@@ -275,8 +275,6 @@ export class Gateway extends EventEmitter<{
                 }
               })
             );
-
-          console.log(message.dt)
 
           const oldPresence: Presence | null = client.identity.presence;
 

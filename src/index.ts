@@ -4,7 +4,7 @@ const gateway = new Gateway();
 
 // Gateway
 gateway.on('ready', () =>
-  console.log(`Gateway started on port ${gateway.server.port}`)
+  console.log(`Gateway started on port ${gateway.server?.port}`)
 );
 
 gateway.serve();
