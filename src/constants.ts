@@ -34,6 +34,13 @@ export type WebSocketData = {
   id: string;
 };
 
+export type IPCMessagePayload = {
+  type: string;
+  event: string;
+  client: string;
+  [key: string]: unknown;
+};
+
 export type EncodingType = 'json' | 'msgpack';
 
 export type AuthenticationType = 'unauthenticated' | 'authenticated';

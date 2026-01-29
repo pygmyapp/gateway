@@ -14,7 +14,8 @@ import {
   type Presence,
   type RawUser,
   type User,
-  type WebSocketData
+  type WebSocketData,
+  type IPCMessagePayload
 } from '../constants';
 import { generateSnowflake } from '../snowflake';
 
@@ -483,11 +484,13 @@ export class Gateway extends EventEmitter<{
    * @param message IPC message data
    */
   async handleIPCMessage(message: IPCMessage) {
-    const type = message.payload.type as string;
+    if (typeof message.payload !== 'object' || message.payload === null) return;
 
-    if (type === 'event') {
+    const raw = message.payload as IPCMessagePayload;
+
+    if (raw.type === 'event') {
       const {
-        type: _type,
+        type,
         event,
         client: clientId,
         ...payload
@@ -496,7 +499,7 @@ export class Gateway extends EventEmitter<{
         event: string;
         client: string;
         [key: string]: unknown;
-      } = message.payload;
+      } = raw;
 
       // Handle "broadcast" type events separately
       // TODO: only add this in when adding user update events? don't know what crack i was on but presence update ain't one lmao
@@ -696,18 +699,19 @@ export class Gateway extends EventEmitter<{
   ): Promise<{ valid: boolean; userId: string | null }> {
     return new Promise((resolve, _reject) => {
       this.ipc.on('message', (message: IPCMessage) => {
+        const payload = message.payload as IPCMessagePayload;
+
         if (
           message.from === 'rest' &&
-          'type' in message.payload &&
-          (message.payload.type as string) === 'response' &&
-          'token' in message.payload &&
-          (message.payload.token as string) === token &&
-          'valid' in message.payload &&
-          'userId' in message.payload
+          payload.type === 'response' &&
+          'token' in payload &&
+          (payload.token as string) === token &&
+          'valid' in payload &&
+          'userId' in payload
         )
           return resolve({
-            valid: message.payload.valid as boolean,
-            userId: message.payload.userId as string | null
+            valid: payload.valid as boolean,
+            userId: payload.userId as string | null
           });
       });
 
@@ -727,16 +731,17 @@ export class Gateway extends EventEmitter<{
   fetchUserData(userId: string): Promise<User[]> {
     return new Promise((resolve, _reject) => {
       this.ipc.on('message', (message: IPCMessage) => {
+        const payload = message.payload as IPCMessagePayload;
+
         if (
           message.from === 'rest' &&
-          'type' in message.payload &&
-          (message.payload.type as string) === 'response' &&
-          'userId' in message.payload &&
-          (message.payload.userId as string) === userId &&
-          'data' in message.payload
+          payload.type === 'response' &&
+          'userId' in payload &&
+          (payload.userId as string) === userId &&
+          'data' in payload
         ) {
           // Determine and add presence data by finding client
-          const data: User[] = (message.payload.data as RawUser[]).map(
+          const data: User[] = (payload.data as RawUser[]).map(
             (user) => {
               const client = this.clients.find(
                 (client) =>
