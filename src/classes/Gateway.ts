@@ -335,17 +335,17 @@ export class Gateway extends EventEmitter<{
         if (!valid || userId === null)
           return ws.close(CloseCodes.INVALID_AUTHENTICATION);
 
-        // Fetch initial data to send
-        const users = await this.fetchUserData(userId);
-
-        // Set client data
-        client.status = 'authenticated';
-        client.relations = users.map(({ id }) => id);
         client.identity.id = userId;
+        client.status = 'authenticated';
         client.identity.presence = {
           status: message.dt?.presence ? message.dt.presence.status : 'online',
           text: message.dt?.presence ? message.dt.presence.text : null
         };
+
+        // Fetch initial data to send
+        const users = await this.fetchUserData(userId);
+
+        client.relations = users.map(({ id }) => id);
 
         // Send READY
         ws.send(
@@ -571,6 +571,7 @@ export class Gateway extends EventEmitter<{
    */
   serve() {
     this.server = Bun.serve({
+      hostname: '0.0.0.0',
       fetch(req, server) {
         const upgraded = server.upgrade(req, {
           data: {
